@@ -1,10 +1,12 @@
 import sqlite3
 import requests
 import datetime
+import os
 from flask import Flask, jsonify, request, render_template_string
 
 app = Flask(__name__)
-# ВСТАВЬ СВОЙ ТОКЕН НИЖЕ
+
+# ТВОЙ ТОКЕН
 BOT_TOKEN = "8723694663:AAEKRDMJ3JvrNDMUR_6vc12ztF8npLFdO54"
 
 def init_db():
@@ -81,6 +83,7 @@ html_template = """
     const prizes = ["Bear", "Rocket", "Heart", "Rose", "Ничего", "Ничего", "Ничего", "Ничего"];
 
     async function updateStatus() {
+        if (!userId) return;
         const res = await fetch(`/get_status?id=${userId}`);
         const data = await res.json();
         triesDisplay.innerText = data.spins_left;
@@ -102,6 +105,9 @@ html_template = """
                     wheel.style.transform = `rotate(${totalRotation}deg)`;
                     setTimeout(() => {
                         alert("Ваш приз: " + prizes[randomIndex]);
+                        const finalAngle = totalRotation % 360;
+                        wheel.style.transition = 'none';
+                        wheel.style.transform = `rotate(${finalAngle}deg)`;
                         updateStatus();
                     }, 4100);
                 } else {
@@ -110,7 +116,7 @@ html_template = """
                 }
             });
         } else {
-            alert(data.error || "Ошибка");
+            alert(data.error || "Ошибка счета");
             btn.disabled = false;
         }
     }
@@ -134,20 +140,28 @@ def get_status():
 def create_spin_invoice():
     user_id = request.args.get('id', type=int)
     count, today = get_user_stats(user_id)
+    
     if count >= 3:
-        return jsonify({"error": "Лимит исчерпан"}), 400
+        return jsonify({"error": "Лимит 3 прокрута исчерпан"}), 400
 
     payload = {
         "title": "Один прокрут",
         "description": "Попытка в NFT Wheel",
         "payload": f"spin_{user_id}",
+        "provider_token": "", 
         "currency": "XTR",
         "prices": [{"label": "Spin", "amount": 6}]
     }
 
     url = f"https://telegram.org{BOT_TOKEN}/createInvoiceLink"
-    r = requests.post(url, json=payload)
-    return jsonify({"url": r.json().get("result")})
+    try:
+        r = requests.post(url, json=payload)
+        res = r.json()
+        if res.get("ok"):
+            return jsonify({"url": res["result"]})
+        return jsonify({"error": "Telegram API Error"}), 500
+    except:
+        return jsonify({"error": "Server Error"}), 500
 
 @app.route('/confirm_spin', methods=['POST'])
 def confirm_spin():
@@ -157,6 +171,5 @@ def confirm_spin():
     return jsonify({"success": True})
 
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
