@@ -162,7 +162,15 @@ def create_spin_invoice():
         return jsonify({"error": "Telegram API Error"}), 500
     except:
         return jsonify({"error": "Server Error"}), 500
-
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    update = request.get_json()
+    if "pre_checkout_query" in update:
+        query_id = update["pre_checkout_query"]["id"]
+        # Подтверждаем платеж
+        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/answerPreCheckoutQuery", 
+                      json={"pre_checkout_query_id": query_id, "ok": True})
+    return "OK", 200
 @app.route('/confirm_spin', methods=['POST'])
 def confirm_spin():
     user_id = request.args.get('id', type=int)
