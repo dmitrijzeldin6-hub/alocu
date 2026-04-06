@@ -3,9 +3,8 @@ from flask import Flask, jsonify, render_template_string
 
 app = Flask(__name__)
 
-# --- НАСТРОЙКИ ---
-BOT_TOKEN = "8723694663:AAEKRDMJ3JvrNDMUR_6vc12ztF8npLFdO54" 
-PRICE_STARS = 5
+# ПРОВЕРЬ ТОКЕН: 8723694663:AAEKRDMJ3JvrNDMUR_6vc12ztF8npLFdO54
+BOT_TOKEN = "8723694663:AAEKRDMJ3JvrNDMUR_6vc12ztF8npLFdO54"
 
 html_template = """
 <!DOCTYPE html>
@@ -22,7 +21,7 @@ html_template = """
             font-family: 'Segoe UI', sans-serif; overflow: hidden; color: white;
         }
         .main-container { text-align: center; position: relative; width: 100%; }
-        h1 { color: #d4af37; font-size: 2.2rem; text-transform: uppercase; margin: 0; text-shadow: 0 0 15px rgba(212, 175, 55, 0.5); }
+        h1 { color: #d4af37; font-size: 2rem; text-transform: uppercase; margin: 0; text-shadow: 0 0 15px rgba(212, 175, 55, 0.5); }
         .price-info { color: #ffd700; margin: 10px 0 20px; font-weight: bold; }
         #wheel {
             width: 280px; height: 280px; border-radius: 50%; border: 8px solid #d4af37;
@@ -31,7 +30,7 @@ html_template = """
         }
         .label { position: absolute; width: 100%; height: 100%; text-align: center; font-weight: bold; font-size: 10px; padding-top: 15px; box-sizing: border-box; }
         .spin-btn { margin-top: 30px; padding: 15px 40px; font-size: 18px; background: #d4af37; color: black; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; }
-        .spin-btn:disabled { opacity: 0.4; }
+        .spin-btn:disabled { opacity: 0.5; }
     </style>
 </head>
 <body>
@@ -59,54 +58,44 @@ html_template = """
     var btn = document.getElementById('btn');
     var wheel = document.getElementById('wheel');
     var prizes = ["Bear", "Rocket", "Heart", "Rose", "Пусто", "Пусто", "Пусто", "Пусто"];
-    var currentRotation = 0;
+    var rotation = 0;
 
     btn.addEventListener('click', function() {
         btn.disabled = true;
-        btn.innerText = "СВЯЗЬ С ТГ...";
-
-        // Используем GET для максимальной совместимости
-        fetch('/create-invoice') 
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.ok && data.result) {
-                btn.innerText = "ОПЛАТИТЬ ⭐️";
-                tg.openInvoice(data.result, function(status) {
-                    if (status === 'paid') {
-                        runWheel();
-                    } else {
-                        tg.showAlert("Оплата: " + status);
-                        resetBtn();
-                    }
-                });
-            } else {
-                tg.showAlert("Ошибка API: " + (data.description || "Нет ответа"));
-                resetBtn();
-            }
-        })
-        .catch(function(e) {
-            tg.showAlert("Ошибка сети: " + e.message);
-            resetBtn();
-        });
+        btn.innerText = "СВЯЗЬ...";
+        
+        fetch('/pay', { cache: "no-cache" })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && data.result) {
+                    btn.innerText = "ОПЛАТА...";
+                    tg.openInvoice(data.result, function(status) {
+                        if (status === 'paid') {
+                            rotation += 1800 + Math.floor(Math.random() * 360);
+                            wheel.style.transform = "rotate(" + rotation + "deg)";
+                            setTimeout(function() {
+                                tg.showAlert("NFT ВЫИГРАН!");
+                                btn.disabled = false;
+                                btn.innerText = "КРУТИТЬ";
+                            }, 4500);
+                        } else {
+                            tg.showAlert("Статус: " + status);
+                            btn.disabled = false;
+                            btn.innerText = "КРУТИТЬ";
+                        }
+                    });
+                } else {
+                    tg.showAlert("Ошибка API: " + JSON.stringify(data));
+                    btn.disabled = false;
+                    btn.innerText = "КРУТИТЬ";
+                }
+            })
+            .catch(function(e) {
+                tg.showAlert("Ошибка сервера. Попробуйте обновить страницу.");
+                btn.disabled = false;
+                btn.innerText = "КРУТИТЬ";
+            });
     });
-
-    function resetBtn() {
-        btn.disabled = false;
-        btn.innerText = "КРУТИТЬ";
-    }
-
-    function runWheel() {
-        btn.innerText = "УДАЧИ!";
-        var randomIndex = Math.floor(Math.random() * prizes.length);
-        var extraRotation = 1800 + (360 - (randomIndex * 45));
-        currentRotation += extraRotation;
-        wheel.style.transform = "rotate(" + currentRotation + "deg)";
-        setTimeout(function() {
-            var result = prizes[randomIndex];
-            tg.showAlert(result === "Пусто" ? "Ничего не выпало!" : "ВЫ ВЫИГРАЛИ: " + result);
-            resetBtn();
-        }, 4500);
-    }
 </script>
 </body>
 </html>
@@ -116,23 +105,22 @@ html_template = """
 def home():
     return render_template_string(html_template)
 
-@app.route('/create-invoice') # Теперь работает через GET
-def create_invoice():
+@app.route('/pay')
+def pay():
     url = f"https://telegram.org{BOT_TOKEN}/createInvoiceLink"
     payload = {
-        "title": "Удача NFT",
-        "description": "5 Stars",
-        "payload": "spin_pay",
+        "title": "NFT Spin",
+        "description": "1 прокрут за 5 звёзд",
+        "payload": "user_spin",
         "provider_token": "", 
         "currency": "XTR", 
-        "prices": [{"label": "Stars", "amount": PRICE_STARS}]
+        "prices": [{"label": "Stars", "amount": 5}]
     }
     try:
-        r = requests.post(url, json=payload, timeout=15)
+        r = requests.post(url, json=payload, timeout=10)
         return jsonify(r.json())
     except Exception as e:
         return jsonify({"ok": False, "description": str(e)})
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
