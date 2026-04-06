@@ -59,57 +59,70 @@ html_template = """
 </div>
 
 <script>
-    const tg = window.Telegram.WebApp;
+    // Инициализация
+    var tg = window.Telegram.WebApp;
     tg.ready();
     tg.expand();
 
-    const btn = document.getElementById('btn');
-    const wheel = document.getElementById('wheel');
-    const prizes = ["Bear", "Rocket", "Heart", "Rose", "Пусто", "Пусто", "Пусто", "Пусто"];
-    let currentRotation = 0;
+    var btn = document.getElementById('btn');
+    var wheel = document.getElementById('wheel');
+    var prizes = ["Bear", "Rocket", "Heart", "Rose", "Пусто", "Пусто", "Пусто", "Пусто"];
+    var currentRotation = 0;
 
-    // ОБРАБОТКА КЛИКА ЧЕРЕЗ СЛУШАТЕЛЬ (самый надежный метод)
-    btn.addEventListener('click', async function() {
+    // Сразу проверяем, работает ли кнопка (визуальный тест)
+    btn.style.border = "2px solid green"; 
+
+    btn.addEventListener('click', function() {
         btn.disabled = true;
-        
-        try {
-            const response = await fetch('/create-invoice', { 
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            });
-            const data = await response.json();
+        btn.innerText = "ЗАГРУЗКА...";
 
+        // Используем полный путь (замени ТВОЕ-ИМЯ на реальное имя с Render)
+        fetch('/create-invoice', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
             if (data.ok && data.result) {
-                // Прямой вызов счета
+                btn.innerText = "ОПЛАТА...";
                 tg.openInvoice(data.result, function(status) {
                     if (status === 'paid') {
                         runWheel();
                     } else {
-                        tg.showAlert("Оплата не прошла или была отменена.");
-                        btn.disabled = false;
+                        tg.showAlert("Оплата отменена: " + status);
+                        resetBtn();
                     }
                 });
             } else {
-                tg.showAlert("Ошибка API: " + (data.description || "Бот не смог создать счет"));
-                btn.disabled = false;
+                tg.showAlert("Ошибка API: " + (data.description || "Нет ответа"));
+                resetBtn();
             }
-        } catch (e) {
-            tg.showAlert("Сервер Render не отвечает. Подождите 30 сек и попробуйте снова.");
-            btn.disabled = false;
-        }
+        })
+        .catch(function(error) {
+            tg.showAlert("Ошибка сервера: " + error.message);
+            resetBtn();
+        });
     });
 
+    function resetBtn() {
+        btn.disabled = false;
+        btn.innerText = "КРУТИТЬ";
+    }
+
     function runWheel() {
-        const randomIndex = Math.floor(Math.random() * prizes.length);
-        const extraRotation = 1800 + (360 - (randomIndex * 45));
+        btn.innerText = "УДАЧИ!";
+        var randomIndex = Math.floor(Math.random() * prizes.length);
+        var extraRotation = 1800 + (360 - (randomIndex * 45));
         currentRotation += extraRotation;
         
-        wheel.style.transform = `rotate(${currentRotation}deg)`;
+        wheel.style.transform = "rotate(" + currentRotation + "deg)";
         
-        setTimeout(() => {
-            const result = prizes[randomIndex];
+        setTimeout(function() {
+            var result = prizes[randomIndex];
             tg.showAlert(result === "Пусто" ? "Ничего не выпало!" : "ВЫ ВЫИГРАЛИ: " + result);
-            btn.disabled = false;
+            resetBtn();
         }, 4500);
     }
 </script>
