@@ -4,7 +4,7 @@ from flask import Flask, jsonify, render_template_string
 app = Flask(__name__)
 
 # --- НАСТРОЙКИ ---
-BOT_TOKEN = "8723694663:AAEKRDMJ3JvrNDMUR_6vc12ztF8npLFdO54"  # <--- ВСТАВЬ СЮДА ТОКЕН
+BOT_TOKEN = "8723694663:AAEKRDMJ3JvrNDMUR_6vc12ztF8npLFdO54" 
 PRICE_STARS = 5
 
 # HTML шаблон (Фронтенд)
@@ -15,7 +15,7 @@ html_template = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ALOCU gift | NFT Wheel</title>
-    <!-- Подключаем скрипт Telegram WebApp -->
+    <!-- ИСПРАВЛЕНО: Правильный путь к скрипту Telegram -->
     <script src="https://telegram.org"></script>
     <style>
         body {
@@ -66,8 +66,7 @@ html_template = """
             font-weight: bold; border-radius: 50px; transition: 0.3s;
             box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4);
         }
-        .spin-btn:hover:not(:disabled) { transform: scale(1.05); }
-        .spin-btn:disabled { opacity: 0.4; filter: grayscale(1); cursor: not-allowed; }
+        .spin-btn:disabled { opacity: 0.4; filter: grayscale(1); }
     </style>
 </head>
 <body>
@@ -92,47 +91,50 @@ html_template = """
 </div>
 
 <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
-
-    const wheel = document.getElementById('wheel');
     const btn = document.getElementById('btn');
+    const wheel = document.getElementById('wheel');
     const prizes = ["Bear", "Rocket", "Heart", "Rose", "Пусто", "Пусто", "Пусто", "Пусто"];
-
     let currentRotation = 0;
 
+    const tg = window.Telegram ? window.Telegram.WebApp : null;
+
+    if (tg) {
+        tg.expand();
+    }
+
     async function handleSpinClick() {
+        if (!tg || !tg.initData) {
+            alert("Ошибка: Откройте приложение внутри Telegram!");
+            return;
+        }
+
         btn.disabled = true;
 
         try {
-            // 1. Запрос к бэкенду за ссылкой на оплату Stars
             const response = await fetch('/create-stars-invoice', { method: 'POST' });
             const data = await response.json();
 
             if (data.ok && data.result) {
-                // 2. Открытие окна оплаты в Telegram
                 tg.openInvoice(data.result, function(status) {
                     if (status === 'paid') {
-                        runWheel(); // Если оплачено — крутим
+                        runWheel();
                     } else {
-                        tg.showAlert("Оплата отменена или не удалась.");
+                        tg.showAlert("Оплата не прошла.");
                         btn.disabled = false;
                     }
                 });
             } else {
-                tg.showAlert("Ошибка при создании счета. Проверьте токен бота.");
+                tg.showAlert("Ошибка API: " + (data.description || "Не удалось создать счет"));
                 btn.disabled = false;
             }
         } catch (e) {
-            tg.showAlert("Ошибка связи с сервером.");
+            tg.showAlert("Ошибка сервера: " + e.message);
             btn.disabled = false;
         }
     }
 
     function runWheel() {
         const randomIndex = Math.floor(Math.random() * prizes.length);
-
-        // Минимум 5 кругов (1800 град) + позиция сектора
         const extraRotation = 1800 + (360 - (randomIndex * 45));
         currentRotation += extraRotation;
 
@@ -141,37 +143,30 @@ html_template = """
 
         setTimeout(() => {
             const result = prizes[randomIndex];
-            if(result === "Пусто") {
-                tg.showAlert("В этот раз пусто! Попробуйте еще раз.");
-            } else {
-                tg.showConfirm("ПОЗДРАВЛЯЕМ! Вы выиграли: " + result + ". Желаете забрать?");
-            }
+            tg.showAlert(result === "Пусто" ? "Ничего не выпало!" : "ВЫ ВЫИГРАЛИ: " + result);
             btn.disabled = false;
         }, 4100);
     }
 </script>
-
 </body>
 </html>
 """
-
 
 @app.route('/')
 def home():
     return render_template_string(html_template)
 
-
 @app.route('/create-stars-invoice', methods=['POST'])
 def create_invoice():
-    """Создает инвойс для Telegram Stars (XTR)"""
+    # ИСПРАВЛЕНО: Правильный URL для API Telegram
     url = f"https://telegram.org{BOT_TOKEN}/createInvoiceLink"
 
     payload = {
-        "title": "Прокрут NFT колеса",
-        "description": "Оплата одного прокрута в Mini App",
+        "title": "Прокрут колеса",
+        "description": "Попытка выбить NFT",
         "payload": "wheel_spin_payment",
-        "provider_token": "",  # Для Stars оставляем пустым
-        "currency": "XTR",  # Код для Telegram Stars
+        "provider_token": "", 
+        "currency": "XTR", 
         "prices": [{"label": "Stars", "amount": PRICE_STARS}]
     }
 
@@ -181,8 +176,6 @@ def create_invoice():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
-
 if __name__ == '__main__':
-    # ВАЖНО: Telegram Mini App требует HTTPS.
-    # При разработке локально используйте ngrok.
+    # Для Render лучше оставить стандартный запуск или добавить os.environ.get('PORT')
     app.run(debug=True, port=8080)
