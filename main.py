@@ -1,126 +1,147 @@
-import os, requests
-from flask import Flask, jsonify, render_template_string
+from flask import Flask
 
 app = Flask(__name__)
-
-# ПРОВЕРЬ ТОКЕН: 8723694663:AAEKRDMJ3JvrNDMUR_6vc12ztF8npLFdO54
-BOT_TOKEN = "8723694663:AAEKRDMJ3JvrNDMUR_6vc12ztF8npLFdO54"
 
 html_template = """
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>ALOCU gift | NFT Wheel</title>
-    <script src="https://telegram.org"></script>
     <style>
         body {
             margin: 0; height: 100vh; display: flex; align-items: center; justify-content: center;
             background: radial-gradient(circle, #463305 0%, #000 100%);
-            font-family: 'Segoe UI', sans-serif; overflow: hidden; color: white;
+            font-family: 'Segoe UI', sans-serif; overflow: hidden;
         }
-        .main-container { text-align: center; position: relative; width: 100%; }
-        h1 { color: #d4af37; font-size: 2rem; text-transform: uppercase; margin: 0; text-shadow: 0 0 15px rgba(212, 175, 55, 0.5); }
-        .price-info { color: #ffd700; margin: 10px 0 20px; font-weight: bold; }
+        .main-container { text-align: center; position: relative; }
+        h1 {
+            color: #d4af37; font-size: 3rem; margin: 0 0 10px 0;
+            text-transform: uppercase; letter-spacing: 5px;
+            text-shadow: 0 0 15px rgba(212, 175, 55, 0.5);
+        }
+        .attempts-text { color: #fff; margin-bottom: 20px; font-size: 1.1rem; opacity: 0.8; }
+
+        .arrow {
+            position: absolute; top: 115px; left: 50%; transform: translateX(-50%);
+            width: 0; height: 0; border-left: 15px solid transparent;
+            border-right: 15px solid transparent; border-top: 35px solid #ff4400;
+            z-index: 10; filter: drop-shadow(0 0 5px red);
+        }
+
         #wheel {
-            width: 280px; height: 280px; border-radius: 50%; border: 8px solid #d4af37;
-            margin: 0 auto; position: relative; transition: transform 4s cubic-bezier(0.15, 0, 0.15, 1);
-            background: conic-gradient(#d4af37 0deg 45deg, #222 45deg 90deg, #d4af37 90deg 135deg, #222 135deg 180deg, #444 180deg 225deg, #333 225deg 270deg, #444 270deg 315deg, #333 315deg 360deg);
+            width: 350px; height: 350px; border-radius: 50%;
+            border: 8px solid #d4af37;
+            background: conic-gradient(
+                #d4af37 0deg 45deg, #222 45deg 90deg,
+                #d4af37 90deg 135deg, #222 135deg 180deg,
+                #444 180deg 225deg, #333 225deg 270deg,
+                #444 270deg 315deg, #333 315deg 360deg
+            );
+            position: relative; 
+            /* Плавность вращения */
+            transition: transform 4s cubic-bezier(0.15, 0, 0.15, 1);
+            box-shadow: 0 0 50px rgba(212, 175, 55, 0.4);
         }
-        .label { position: absolute; width: 100%; height: 100%; text-align: center; font-weight: bold; font-size: 10px; padding-top: 15px; box-sizing: border-box; }
-        .spin-btn { margin-top: 30px; padding: 15px 40px; font-size: 18px; background: #d4af37; color: black; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; }
-        .spin-btn:disabled { opacity: 0.5; }
+
+        .label {
+            position: absolute; width: 100%; height: 100%;
+            text-align: center; color: white; font-weight: bold;
+            text-transform: uppercase; font-size: 13px; pointer-events: none;
+        }
+
+        .spin-btn {
+            margin-top: 30px; padding: 15px 50px; font-size: 20px;
+            background: #d4af37; color: black; border: none; cursor: pointer;
+            font-weight: bold; border-radius: 8px; transition: 0.3s;
+        }
+        .spin-btn:hover:not(:disabled) { background: #fff; }
+        .spin-btn:disabled { opacity: 0.3; cursor: not-allowed; }
     </style>
 </head>
 <body>
+
 <div class="main-container">
     <h1>ALOCU gift</h1>
-    <div class="price-info">Цена: 5 ⭐️</div>
+    <div class="attempts-text">Попыток: <span id="tries">3</span></div>
+
+    <div class="arrow"></div>
     <div id="wheel">
         <div class="label" style="transform: rotate(22.5deg)">Bear</div>
         <div class="label" style="transform: rotate(67.5deg)">Rocket</div>
         <div class="label" style="transform: rotate(112.5deg)">Heart</div>
         <div class="label" style="transform: rotate(157.5deg)">Rose</div>
-        <div class="label" style="transform: rotate(202.5deg)">Пусто</div>
-        <div class="label" style="transform: rotate(247.5deg)">Пусто</div>
-        <div class="label" style="transform: rotate(292.5deg)">Пусто</div>
-        <div class="label" style="transform: rotate(337.5deg)">Пусто</div>
+        <div class="label" style="transform: rotate(202.5deg)">Ничего</div>
+        <div class="label" style="transform: rotate(247.5deg)">Ничего</div>
+        <div class="label" style="transform: rotate(292.5deg)">Ничего</div>
+        <div class="label" style="transform: rotate(337.5deg)">Ничего</div>
     </div>
-    <button class="spin-btn" id="btn">КРУТИТЬ</button>
+
+    <button class="spin-btn" id="btn" onclick="spin()">Крутить</button>
 </div>
 
 <script>
-    var tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
+    const wheel = document.getElementById('wheel');
+    const btn = document.getElementById('btn');
+    const triesDisplay = document.getElementById('tries');
 
-    var btn = document.getElementById('btn');
-    var wheel = document.getElementById('wheel');
-    var prizes = ["Bear", "Rocket", "Heart", "Rose", "Пусто", "Пусто", "Пусто", "Пусто"];
-    var rotation = 0;
+    const prizes = ["Bear", "Rocket", "Heart", "Rose", "Ничего", "Ничего", "Ничего", "Ничего"];
+    let attempts = 3;
 
-    btn.addEventListener('click', function() {
+    function spin() {
+        if (attempts <= 0) return;
+
+        // Блокируем кнопку сразу
         btn.disabled = true;
-        btn.innerText = "СВЯЗЬ...";
-        
-        fetch('/pay', { cache: "no-cache" })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.ok && data.result) {
-                    btn.innerText = "ОПЛАТА...";
-                    tg.openInvoice(data.result, function(status) {
-                        if (status === 'paid') {
-                            rotation += 1800 + Math.floor(Math.random() * 360);
-                            wheel.style.transform = "rotate(" + rotation + "deg)";
-                            setTimeout(function() {
-                                tg.showAlert("NFT ВЫИГРАН!");
-                                btn.disabled = false;
-                                btn.innerText = "КРУТИТЬ";
-                            }, 4500);
-                        } else {
-                            tg.showAlert("Статус: " + status);
-                            btn.disabled = false;
-                            btn.innerText = "КРУТИТЬ";
-                        }
-                    });
-                } else {
-                    tg.showAlert("Ошибка API: " + JSON.stringify(data));
-                    btn.disabled = false;
-                    btn.innerText = "КРУТИТЬ";
-                }
-            })
-            .catch(function(e) {
-                tg.showAlert("Ошибка сервера. Попробуйте обновить страницу.");
+        attempts--;
+        triesDisplay.innerText = attempts;
+
+        // 1. Выбираем случайный приз
+        const randomIndex = Math.floor(Math.random() * prizes.length);
+
+        // 2. Расчет угла: 
+        // 3600 градусов (10 кругов) + корректировка под сектор
+        // Вычитаем (randomIndex * 45), чтобы нужный сектор доехал до 0 градусов (вверх)
+        const totalRotation = 3600 + (360 - (randomIndex * 45));
+
+        // 3. Сбрасываем колесо в 0 без анимации перед новым броском (опционально)
+        // Но лучше просто прибавлять к текущему, чтобы не было рывка
+        wheel.style.transition = 'transform 4s cubic-bezier(0.15, 0, 0.15, 1)';
+        wheel.style.transform = `rotate(${totalRotation}deg)`;
+
+        // 4. Ждем остановки
+        setTimeout(() => {
+            const result = prizes[randomIndex];
+
+            if(result === "Ничего") {
+                alert("Эх, ничего не выпало! Осталось попыток: " + attempts);
+            } else {
+                alert("ПОЗДРАВЛЯЕМ! Ваш NFT: " + result);
+            }
+
+            // Если попытки остались, возвращаем кнопку
+            if (attempts > 0) {
                 btn.disabled = false;
-                btn.innerText = "КРУТИТЬ";
-            });
-    });
+                // Сбрасываем угол в "визуальный" остаток, чтобы крутить дальше без бесконечных тысяч градусов
+                const finalAngle = totalRotation % 360;
+                wheel.style.transition = 'none';
+                wheel.style.transform = `rotate(${finalAngle}deg)`;
+            } else {
+                alert("Все попытки на сегодня закончены!");
+            }
+        }, 4100);
+    }
 </script>
+
 </body>
 </html>
 """
 
+
 @app.route('/')
 def home():
-    return render_template_string(html_template)
+    return html_template
 
-@app.route('/pay')
-def pay():
-    url = f"https://telegram.org{BOT_TOKEN}/createInvoiceLink"
-    payload = {
-        "title": "NFT Spin",
-        "description": "1 прокрут за 5 звёзд",
-        "payload": "user_spin",
-        "provider_token": "", 
-        "currency": "XTR", 
-        "prices": [{"label": "Stars", "amount": 5}]
-    }
-    try:
-        r = requests.post(url, json=payload, timeout=10)
-        return jsonify(r.json())
-    except Exception as e:
-        return jsonify({"ok": False, "description": str(e)})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
+    app.run(debug=True, port=8080)
