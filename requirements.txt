@@ -1,3 +1,4 @@
-flask
-gunicorn
+Flask
+aiogram
 requests
+gunicorn
