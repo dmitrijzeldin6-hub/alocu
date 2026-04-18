@@ -1,6 +1,7 @@
 import asyncio
 import threading
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # Добавь это
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import LabeledPrice, PreCheckoutQuery, Message
 
@@ -8,6 +9,7 @@ from aiogram.types import LabeledPrice, PreCheckoutQuery, Message
 BOT_TOKEN = "8723694663:AAEKRDMJ3JvrNDMUR_6vc12ztF8npLFdO54"  # Замени на свой из @BotFather
 app = Flask(__name__)
 
+CORS(app)
 # Инициализация aiogram
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -119,25 +121,35 @@ html_template = """
 
     async function buyTries() {
         const userId = tg.initDataUnsafe.user?.id || 0;
-        const response = await fetch('/create-invoice', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ user_id: userId })
-        });
-        const data = await response.json();
+        
+        // ЗАМЕНИ 'https://onrender.com' на реальную ссылку из личного кабинета Render
+        const API_URL = 'https://alocu-1.onrender.com/create-invoice';
 
-        if (data.link) {
-            tg.openInvoice(data.link, function(status) {
-                if (status === 'paid') {
-                    attempts += 5;
-                    triesDisplay.innerText = attempts;
-                    btn.disabled = false;
-                    alert("Оплата прошла! Вам добавлено 5 попыток.");
-                }
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ user_id: userId })
             });
+            
+            const data = await response.json();
+            
+            if (data.link) {
+                tg.openInvoice(data.link, function(status) {
+                    if (status === 'paid') {
+                        attempts += 5;
+                        document.getElementById('tries').innerText = attempts;
+                        document.getElementById('btn').disabled = false;
+                        alert("Оплата прошла! Вам добавлено 5 попыток.");
+                    }
+                });
+            } else {
+                alert("Не удалось получить ссылку на оплату. Проверь логи сервера.");
+            }
+        } catch (err) {
+            alert("Ошибка сети: " + err.message);
         }
     }
-
     function spin() {
         if (attempts <= 0) return;
         btn.disabled = true;
